@@ -39,6 +39,7 @@
   /* ---------- estado ---------- */
   const S = {
     dia: hoy(),
+    vista: 'dia',
     filtro: 'todos',
     entrega: '',
     q: '',
@@ -65,7 +66,7 @@
 
   /* ---------- PEDIDOS DEL DÍA ---------- */
   async function cargarDia() {
-    S.pedidos = await api(`/api/pedidos?desde=${S.dia}&hasta=${S.dia}`);
+    S.pedidos = await api(S.vista === 'todos' ? '/api/pedidos' : `/api/pedidos?desde=${S.dia}&hasta=${S.dia}`);
     const vivos = new Set(S.pedidos.map(p => p.id));
     [...S.sel].forEach(id => vivos.has(id) || S.sel.delete(id));
   }
@@ -92,7 +93,7 @@
         ${preview ? '' : `<button class="box ${sel ? 'on' : ''}" data-act="sel" aria-pressed="${sel}" aria-label="Seleccionar para agrupar"></button>`}</div>
       ${preview ? `<span class="t-name">${esc(p.nombre) || '<span class="muted">Nombre</span>'}</span>` : `<a class="t-name" href="#/editar/${p.id}">${esc(p.nombre)}</a>`}
       ${tel}
-      <ul>${p.items.map(i => `<li><span>${cant(i.cantidad)}</span>${esc(i.producto)}</li>`).join('')}</ul>
+      <ul>${p.items.map(i => `<li><span class="p">${esc(i.producto)}</span><span class="q">${cant(i.cantidad)}</span></li>`).join('')}</ul>
       ${p.dedicatoria ? `<p class="ded">“${esc(p.dedicatoria)}”</p>` : ''}
       <div class="ft"><span class="tag ${p.entrega === 'envio' ? 'env' : 'ret'}">${p.entrega === 'envio' ? 'Envío' : 'Retira'}</span>
         ${preview ? '' : `<button class="st ${p.estado}" data-act="estado" title="Cambiar estado"><i></i>${ESTADO_LBL[p.estado]}</button>`}</div>
@@ -103,50 +104,80 @@
     </article>`;
   }
 
+  function masthead(...partes) {
+    return `<div class="masthead">${partes.map(p => `<span>${p}</span>`).join('')}</div>`;
+  }
+
+  function grupos(lista) {
+    const h = hoy();
+    const porDia = new Map();
+    lista.forEach(p => { if (!porDia.has(p.fecha)) porDia.set(p.fecha, []); porDia.get(p.fecha).push(p); });
+    const dias = [...porDia.keys()];
+    const prox = dias.filter(d => d >= h).sort();
+    const prev = dias.filter(d => d < h).sort().reverse();
+    const bloque = d => {
+      const ps = porDia.get(d);
+      return `<section class="dia-grupo"><div class="dia-tit"><h2 class="${d === h ? 'hoy-g' : ''}">${d === h ? 'Hoy, ' + largo(d).toLowerCase() : largo(d)}</h2>
+        <span>${ps.length} ${ps.length === 1 ? 'pedido' : 'pedidos'}</span></div>
+        <div class="grid">${ps.map(p => ticket(p)).join('')}</div></section>`;
+    };
+    return prox.map(bloque).join('') +
+      (prev.length ? `<div class="masthead" style="margin:10px 0 26px"><span>Anteriores</span><span>${prev.length} ${prev.length === 1 ? 'día' : 'días'}</span></div>` + prev.map(bloque).join('') : '');
+  }
+
   function pintarPedidos() {
+    const todos = S.vista === 'todos';
     const activos = S.pedidos.filter(p => p.estado !== 'cancelado');
     const lista = filtrados();
     const esHoy = S.dia === hoy();
-    document.getElementById('tab-count').textContent = esHoy ? activos.length || '' : '';
+    if (!todos && esHoy) document.getElementById('tab-count').textContent = activos.length || '';
     const chip = (k, t) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-f="${k}">${t}</button>`;
     const chipE = (k, t) => `<button class="chip ${S.entrega === k ? 'on' : ''}" data-e="${k}">${t}</button>`;
     const searchFocused = document.activeElement && document.activeElement.id === 'q';
+    const d = parse(S.dia);
+    const titulo = todos ? 'Todos <em>los pedidos</em>' : `Pedidos <em>${esHoy ? 'del día' : 'del ' + DIAS[d.getDay()] + ' ' + d.getDate()}</em>`;
+    const stats = todos
+      ? [['Pedidos', activos.length], ['Pendientes', activos.filter(p => p.estado === 'pendiente').length, 'f'],
+         ['Próximos', activos.filter(p => p.fecha >= hoy()).length], ['Entregados', activos.filter(p => p.estado === 'entregado').length]]
+      : [['Pedidos', activos.length], ['Pendientes', activos.filter(p => p.estado === 'pendiente').length, 'f'],
+         ['Para enviar', activos.filter(p => p.entrega === 'envio').length], ['Para retirar', activos.filter(p => p.entrega === 'retiro').length]];
     $app.innerHTML = `
+      ${masthead('Casa Cler', 'Florería', 'Agenda de pedidos', todos ? 'Archivo completo' : largo(S.dia))}
       <div class="head">
         <div>
-          <div class="lbl">Agenda de pedidos</div>
-          <h1>Pedidos <em>${esHoy ? 'del día' : DIAS[parse(S.dia).getDay()] + ' ' + parse(S.dia).getDate()}</em> <span class="heart">&lt;3</span></h1>
-          <div class="daynav">
+          <h1>${titulo} <span class="heart">&lt;3</span></h1>
+          <div class="vista"><button class="${todos ? '' : 'on'}" data-v="dia">Por día</button><button class="${todos ? 'on' : ''}" data-v="todos">Todos los días</button></div>
+          ${todos ? '' : `<div class="daynav">
             <button data-d="-1" aria-label="Día anterior">‹</button>
             <label class="d">${largo(S.dia)}<input type="date" id="pick" value="${S.dia}" aria-label="Elegir día"></label>
             <button data-d="1" aria-label="Día siguiente">›</button>
             ${esHoy ? '' : '<button class="hoy" data-d="0">Hoy</button>'}
+          </div>`}
+        </div>
+        <div>
+          <div class="filters">
+            ${chip('todos', 'Todos')}${chip('pendiente', 'Pendientes')}${chip('listo', 'Listos')}${chip('entregado', 'Entregados')}
+            <span class="sep"></span>${chipE('envio', 'Envío')}${chipE('retiro', 'Retiro')}
+            <input class="search" id="q" type="search" placeholder="buscar…" value="${esc(S.q)}" aria-label="Buscar pedido">
           </div>
-        </div>
-        <div class="filters">
-          ${chip('todos', 'Todos')}${chip('pendiente', 'Pendientes')}${chip('listo', 'Listos')}${chip('entregado', 'Entregados')}
-          <span class="sep"></span>${chipE('envio', 'Envío')}${chipE('retiro', 'Retiro')}
-          <input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.q)}" aria-label="Buscar pedido">
+          <p class="lede" style="margin-left:auto">Cada pedido es una comanda: quién lo pide, qué lleva, cómo se entrega y quién lo tomó. Tocá el estado para avanzarlo y tildá varias comandas para armar el pedido al proveedor.</p>
         </div>
       </div>
-      <div class="stats">
-        <div><span class="lbl">Pedidos</span><b>${activos.length}</b></div>
-        <div><span class="lbl">Pendientes</span><b class="f">${activos.filter(p => p.estado === 'pendiente').length}</b></div>
-        <div><span class="lbl">Para enviar</span><b>${activos.filter(p => p.entrega === 'envio').length}</b></div>
-        <div><span class="lbl">Para retirar</span><b>${activos.filter(p => p.entrega === 'retiro').length}</b></div>
-      </div>
-      ${lista.length ? `<div class="grid">${lista.map(p => ticket(p)).join('')}</div>`
-        : `<div class="empty"><div class="flor-xl"></div><p>${S.pedidos.length ? 'Nada con estos filtros.' : 'Todavía no hay pedidos para este día.'}</p><a class="btn" href="#/nuevo">Nuevo pedido</a></div>`}
+      <div class="stats">${stats.map(([l, n, c]) => `<div><span class="lbl">${l}</span><b class="${c || ''}">${n}</b></div>`).join('')}</div>
+      ${lista.length ? (todos ? grupos(lista) : `<div class="grid">${lista.map(p => ticket(p)).join('')}</div>`)
+        : `<div class="empty"><div class="flor-xl"></div><p>${S.pedidos.length ? 'Nada con estos filtros.' : todos ? 'Todavía no hay pedidos cargados.' : 'Todavía no hay pedidos para este día.'}</p><a class="btn" href="#/nuevo">Nuevo pedido</a></div>`}
       ${S.sel.size ? `<div class="bar"><span><b>${S.sel.size}</b>&nbsp; ${S.sel.size === 1 ? 'seleccionado' : 'seleccionados'}</span>
         <button class="x" data-act="limpiar-sel">quitar</button><button class="btn" data-act="agrupar">Agrupar →</button></div>` : ''}`;
+    nubes();
     if (searchFocused) { const q = document.getElementById('q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   }
 
   $app.addEventListener('click', async e => {
-    const el = e.target.closest('[data-f],[data-e],[data-d],[data-act]');
+    const el = e.target.closest('[data-f],[data-e],[data-d],[data-v],[data-act]');
     if (!el || !$app.contains(el)) return;
     if (el.dataset.f) { S.filtro = el.dataset.f; return pintarPedidos(); }
     if ('e' in el.dataset) { S.entrega = S.entrega === el.dataset.e ? '' : el.dataset.e; return pintarPedidos(); }
+    if ('v' in el.dataset) { S.vista = el.dataset.v; return renderPedidos(); }
     if ('d' in el.dataset) { S.dia = el.dataset.d === '0' ? hoy() : addDays(S.dia, Number(el.dataset.d)); return renderPedidos(); }
     const act = el.dataset.act;
     const card = el.closest('.t');
@@ -154,7 +185,8 @@
     if (act === 'sel') { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); return pintarPedidos(); }
     if (act === 'limpiar-sel') { S.sel.clear(); return pintarPedidos(); }
     if (act === 'agrupar') {
-      S.prov = { ...S.prov, desde: S.dia, hasta: S.dia, preset: 'sel', ids: new Set(S.sel) };
+      const fechas = S.pedidos.filter(p => S.sel.has(p.id)).map(p => p.fecha).sort();
+      S.prov = { ...S.prov, desde: fechas[0] || S.dia, hasta: fechas[fechas.length - 1] || S.dia, preset: 'sel', ids: new Set(S.sel) };
       location.hash = '#/proveedor'; return;
     }
     if (act === 'estado') {
@@ -196,8 +228,9 @@
     const f = p;
     const ahora = new Date();
     $app.innerHTML = `
-      <div class="lbl">${id ? `Pedido Nº ${num(id)} · cargado ${new Date(f.created_at).toLocaleDateString('es-AR')}` : `Pedido nuevo · ${pad(ahora.getHours())}:${pad(ahora.getMinutes())} hs`}</div>
+      ${masthead('Casa Cler', 'Florería', id ? `Pedido Nº ${num(id)}` : 'Pedido nuevo', id ? `Cargado ${new Date(f.created_at).toLocaleDateString('es-AR')}` : `${pad(ahora.getHours())}:${pad(ahora.getMinutes())} hs`)}
       <h1>${id ? 'Editar <em>pedido</em>' : 'Nuevo <em>pedido</em>'}</h1>
+      <p class="lede">Anotá lo que pide el cliente, producto por producto. La dedicatoria va tal cual en la tarjeta; lo demás queda para quien arma el ramo.</p>
       <form class="form" id="form" autocomplete="off" novalidate>
         <div>
           <div class="row2">
@@ -262,7 +295,8 @@
     const preview = () => {
       const d = leer();
       document.getElementById('prev').innerHTML = ticket({ ...d, estado: 'pendiente', items: d.items.length ? d.items : [{ cantidad: '', producto: '…' }] }, { preview: true })
-        + (d.fecha ? `<p class="lbl" style="margin-top:18px">Para el ${esc(largo(d.fecha).toLowerCase())}${d.hora ? ' · ' + esc(d.hora) : ''}</p>` : '');
+        + (d.fecha ? `<p class="lbl cuando">Para el ${esc(largo(d.fecha).toLowerCase())}${d.hora ? ' · ' + esc(d.hora) : ''}</p>` : '');
+      nubes();
     };
     preview();
 
@@ -363,16 +397,18 @@
     const n = S.prov.ids.size;
     const chip = (k, t) => `<button class="chip ${S.prov.preset === k ? 'on' : ''}" data-preset="${k}">${t}</button>`;
     $app.innerHTML = `
+      ${masthead('Casa Cler', 'Florería', `Agrupación · ${n} ${n === 1 ? 'pedido' : 'pedidos'}`, esc(rangoTxt()))}
       <div class="head">
-        <div><div class="lbl">Agrupación · ${n} ${n === 1 ? 'pedido' : 'pedidos'} · ${esc(rangoTxt())}</div>
-          <h1>Pedido <em>al proveedor</em></h1></div>
+        <div>${''}
+          <h1>Pedido <em>al proveedor</em></h1>
+          <p class="lede">Elegí los pedidos y la suma se arma sola, producto por producto, lista para mandar al proveedor por WhatsApp o imprimir.</p></div>
         <div class="filters">${chip('hoy', 'Hoy')}${chip('manana', 'Mañana')}${chip('semana', 'Próximos 7 días')}${chip('fechas', 'Elegir fechas')}</div>
       </div>
       ${S.prov.preset === 'fechas' || S.prov.preset === 'sel' ? `<div class="range no-print"><span class="lbl">Del</span><input type="date" id="pd" value="${S.prov.desde}"><span class="lbl">al</span><input type="date" id="ph" value="${S.prov.hasta}"></div>` : ''}
       <div class="prov">
         <div class="mini-wrap">
           <div class="lbl" style="margin-bottom:12px;display:flex;justify-content:space-between">Pedidos incluidos
-            <span><button class="lbl" data-all="1" style="color:var(--fuc)">todos</button> · <button class="lbl" data-all="0">ninguno</button></span></div>
+            <span><button class="linkbtn f" data-all="1">todos</button> · <button class="linkbtn" data-all="0">ninguno</button></span></div>
           <div class="mini">
             ${S.prov.lista.length ? S.prov.lista.map(p => {
               const on = S.prov.ids.has(p.id);
@@ -424,6 +460,44 @@
       const d = document.getElementById('pd').value, h = document.getElementById('ph').value;
       if (d && h) { S.prov.desde = d <= h ? d : h; S.prov.hasta = d <= h ? h : d; S.prov.preset = 'fechas'; S.prov.ids = null; renderProveedor(); }
     }
+  });
+
+  /* ---------- comandas con forma de nube ---------- */
+  const NUBE = '#f8e8dc', NUBE_SEL = '#f9d6d3';
+  function dibujarNube(el) {
+    const w = el.offsetWidth, h = el.offsetHeight;
+    if (!w || !h) return;
+    const color = el.classList.contains('sel') ? NUBE_SEL : NUBE;
+    const key = `${w}x${h}${color}`;
+    if (el.dataset.nube === key) return;
+    el.dataset.nube = key;
+    const r = Math.max(28, Math.min(58, w / 5.6, h / 4.4));
+    const paso = r * 1.75;
+    const reparto = (largo) => {
+      const n = Math.max(2, Math.round((largo - 2 * r) / paso) + 1);
+      return Array.from({ length: n }, (_, i) => r + (i * (largo - 2 * r)) / (n - 1));
+    };
+    let c = '';
+    reparto(w).forEach(x => { c += `<circle cx="${x.toFixed(1)}" cy="${r}" r="${r}"/><circle cx="${x.toFixed(1)}" cy="${h - r}" r="${r}"/>`; });
+    reparto(h).forEach(y => { c += `<circle cx="${r}" cy="${y.toFixed(1)}" r="${r}"/><circle cx="${w - r}" cy="${y.toFixed(1)}" r="${r}"/>`; });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><g fill="${color}"><rect x="${r}" y="${r}" width="${w - 2 * r}" height="${h - 2 * r}"/>${c}</g></svg>`;
+    el.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+  const ro = 'ResizeObserver' in window ? new ResizeObserver(es => es.forEach(e => dibujarNube(e.target))) : null;
+  function nubes() {
+    if (ro) ro.disconnect();
+    document.querySelectorAll('.t').forEach(t => { dibujarNube(t); if (ro) ro.observe(t); });
+  }
+  document.fonts && document.fonts.ready.then(() => nubes());
+
+  /* ---------- florcita al hacer clic ---------- */
+  document.addEventListener('pointerdown', e => {
+    const b = document.createElement('span');
+    b.className = 'bloom' + (e.target.closest('.btn:not(.ghost):not(.danger),.box.on,.bar') ? ' crema' : '');
+    b.style.left = e.clientX + 'px'; b.style.top = e.clientY + 'px';
+    b.addEventListener('animationend', () => b.remove());
+    document.body.appendChild(b);
+    setTimeout(() => b.remove(), 1000);
   });
 
   /* ---------- LOGIN ---------- */
