@@ -1,15 +1,16 @@
 const { Pool } = require('pg');
 
-if (!process.env.DATABASE_URL) {
-  console.error('Falta la variable DATABASE_URL (conexión a Postgres).');
+// Acepta DATABASE_URL o, si no está, las variables sueltas de Postgres (PGHOST, PGUSER, etc.)
+const url = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_PUBLIC_URL || '';
+if (!url && !process.env.PGHOST) {
+  console.error('Falta la conexión a Postgres: en Railway, en el servicio de la app, agregá la variable DATABASE_URL como referencia a la base (Add Reference → Postgres → DATABASE_URL).');
+  console.error('Variables de base que ve la app ahora:', Object.keys(process.env).filter(k => /^(PG|DATABASE)/.test(k)).join(', ') || 'ninguna');
   process.exit(1);
 }
-
-const url = process.env.DATABASE_URL;
-const needsSsl = process.env.PGSSL === 'true' || /sslmode=require/.test(url);
+const needsSsl = process.env.PGSSL === 'true' || /sslmode=require/.test(url) || /proxy\.rlwy\.net/.test(url);
 
 const pool = new Pool({
-  connectionString: url,
+  ...(url ? { connectionString: url } : {}),
   ssl: needsSsl ? { rejectUnauthorized: false } : false,
 });
 
