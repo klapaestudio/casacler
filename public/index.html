@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Casa Cler · Pedidos</title>
+  <meta name="theme-color" content="#fcf4ea">
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="preload" href="/fonts/cormorant-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top-header">
+    <a href="#/" class="logo" aria-label="Casa Cler — inicio"><img src="/img/logo.png" alt="Casa Cler"></a>
+    <span class="today" id="hoy"></span>
+  </header>
+  <nav class="tabs" id="tabs">
+    <a href="#/" data-tab="pedidos">Pedidos<span class="n" id="tab-count"></span></a>
+    <a href="#/nuevo" data-tab="nuevo">Nuevo pedido</a>
+    <a href="#/proveedor" data-tab="proveedor">Pedido a proveedor</a>
+  </nav>
+  <main id="app" tabindex="-1"></main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
