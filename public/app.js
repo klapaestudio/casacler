@@ -94,7 +94,7 @@
       ${preview ? `<span class="t-name">${esc(p.nombre) || '<span class="muted">Nombre</span>'}</span>` : `<a class="t-name" href="#/editar/${p.id}">${esc(p.nombre)}</a>`}
       ${tel}
       <ul>${p.items.map(i => `<li><span class="p">${esc(i.producto)}</span><span class="q">${cant(i.cantidad)}</span></li>`).join('')}</ul>
-      ${p.dedicatoria ? `<p class="ded">“${esc(p.dedicatoria)}”</p>` : ''}
+      ${p.dedicatoria ? `<p class="ded"><small>Tarjeta</small>“${esc(p.dedicatoria)}”</p>` : ''}
       <div class="ft"><span class="tag ${p.entrega === 'envio' ? 'env' : 'ret'}">${p.entrega === 'envio' ? 'Envío' : 'Retira'}</span>
         ${preview ? '' : `<button class="st ${p.estado}" data-act="estado" title="Cambiar estado"><i></i>${ESTADO_LBL[p.estado]}</button>`}</div>
       ${p.entrega === 'envio' && (p.direccion || p.recibe) ? `<div class="addr">${esc(p.direccion)}${p.recibe ? ` · recibe ${esc(p.recibe)}` : ''}</div>` : ''}
@@ -117,7 +117,7 @@
     const prev = dias.filter(d => d < h).sort().reverse();
     const bloque = d => {
       const ps = porDia.get(d);
-      return `<section class="dia-grupo"><div class="dia-tit"><h2 class="${d === h ? 'hoy-g' : ''}">${d === h ? 'Hoy, ' + largo(d).toLowerCase() : largo(d)}</h2>
+      return `<section class="dia-grupo"><div class="dia-tit"><h2 class="${d === h ? 'hoy-g' : ''}">${d === h ? 'Hoy, <em>' + largo(d).toLowerCase() + '</em>' : largo(d)}</h2>
         <span>${ps.length} ${ps.length === 1 ? 'pedido' : 'pedidos'}</span></div>
         <div class="grid">${ps.map(p => ticket(p)).join('')}</div></section>`;
     };
@@ -142,7 +142,7 @@
       : [['Pedidos', activos.length], ['Pendientes', activos.filter(p => p.estado === 'pendiente').length, 'f'],
          ['Para enviar', activos.filter(p => p.entrega === 'envio').length], ['Para retirar', activos.filter(p => p.entrega === 'retiro').length]];
     $app.innerHTML = `
-      ${masthead('Casa Cler', 'Florería', 'Agenda de pedidos', todos ? 'Archivo completo' : largo(S.dia))}
+      ${masthead('Casa Cler', '<span class="mk">Florería</span>', 'Agenda de pedidos', todos ? 'Archivo completo' : largo(S.dia))}
       <div class="head">
         <div>
           <h1>${titulo} <span class="heart">&lt;3</span></h1>
@@ -160,7 +160,7 @@
             <span class="sep"></span>${chipE('envio', 'Envío')}${chipE('retiro', 'Retiro')}
             <input class="search" id="q" type="search" placeholder="buscar…" value="${esc(S.q)}" aria-label="Buscar pedido">
           </div>
-          <p class="lede" style="margin-left:auto">Cada pedido es una comanda: quién lo pide, qué lleva, cómo se entrega y quién lo tomó. Tocá el estado para avanzarlo y tildá varias comandas para armar el pedido al proveedor.</p>
+          <p class="lede" style="margin-left:auto">Cada pedido es una <b>comanda</b>: quién lo pide, qué lleva, cómo se entrega y quién lo tomó. Tocá el estado para avanzarlo y tildá varias para armar el <span class="mk">pedido al proveedor</span>.</p>
         </div>
       </div>
       <div class="stats">${stats.map(([l, n, c]) => `<div><span class="lbl">${l}</span><b class="${c || ''}">${n}</b></div>`).join('')}</div>
@@ -228,9 +228,9 @@
     const f = p;
     const ahora = new Date();
     $app.innerHTML = `
-      ${masthead('Casa Cler', 'Florería', id ? `Pedido Nº ${num(id)}` : 'Pedido nuevo', id ? `Cargado ${new Date(f.created_at).toLocaleDateString('es-AR')}` : `${pad(ahora.getHours())}:${pad(ahora.getMinutes())} hs`)}
+      ${masthead('Casa Cler', '<span class="mk">Florería</span>', id ? `Pedido Nº ${num(id)}` : 'Pedido nuevo', id ? `Cargado ${new Date(f.created_at).toLocaleDateString('es-AR')}` : `${pad(ahora.getHours())}:${pad(ahora.getMinutes())} hs`)}
       <h1>${id ? 'Editar <em>pedido</em>' : 'Nuevo <em>pedido</em>'}</h1>
-      <p class="lede">Anotá lo que pide el cliente, producto por producto. La dedicatoria va tal cual en la tarjeta; lo demás queda para quien arma el ramo.</p>
+      <p class="lede">Anotá lo que pide el cliente, <b>producto por producto</b>. La <span class="mk">dedicatoria</span> va tal cual en la tarjeta; lo demás queda para quien arma el ramo.</p>
       <form class="form" id="form" autocomplete="off" novalidate>
         <div>
           <div class="row2">
@@ -270,7 +270,7 @@
             ${id ? '<a class="btn ghost" href="#/">Volver</a><button type="button" class="btn danger" id="borrar">Eliminar</button>' : '<button type="button" class="btn ghost" id="limpiar">Limpiar</button>'}
           </div>
         </div>
-        <aside><div class="preview"><h4>Así queda el pedido</h4><div id="prev"></div></div></aside>
+        <aside><div class="preview"><h4>Así queda <span class="mk-box">el pedido</span></h4><div id="prev"></div></div></aside>
       </form>`;
 
     const form = document.getElementById('form');
@@ -397,11 +397,11 @@
     const n = S.prov.ids.size;
     const chip = (k, t) => `<button class="chip ${S.prov.preset === k ? 'on' : ''}" data-preset="${k}">${t}</button>`;
     $app.innerHTML = `
-      ${masthead('Casa Cler', 'Florería', `Agrupación · ${n} ${n === 1 ? 'pedido' : 'pedidos'}`, esc(rangoTxt()))}
+      ${masthead('Casa Cler', '<span class="mk">Florería</span>', `Agrupación · ${n} ${n === 1 ? 'pedido' : 'pedidos'}`, esc(rangoTxt()))}
       <div class="head">
         <div>${''}
           <h1>Pedido <em>al proveedor</em></h1>
-          <p class="lede">Elegí los pedidos y la suma se arma sola, producto por producto, lista para mandar al proveedor por WhatsApp o imprimir.</p></div>
+          <p class="lede">Elegí los pedidos y la suma se arma sola, <b>producto por producto</b>, lista para mandar al proveedor por <span class="mk">WhatsApp</span> o imprimir.</p></div>
         <div class="filters">${chip('hoy', 'Hoy')}${chip('manana', 'Mañana')}${chip('semana', 'Próximos 7 días')}${chip('fechas', 'Elegir fechas')}</div>
       </div>
       ${S.prov.preset === 'fechas' || S.prov.preset === 'sel' ? `<div class="range no-print"><span class="lbl">Del</span><input type="date" id="pd" value="${S.prov.desde}"><span class="lbl">al</span><input type="date" id="ph" value="${S.prov.hasta}"></div>` : ''}
@@ -418,7 +418,7 @@
           </div>
         </div>
         <div class="totales">
-          <div class="lbl" style="margin-bottom:12px">Total a pedir</div>
+          <div class="lbl" style="margin-bottom:12px"><span class="mk-box">Total a pedir</span></div>
           <div class="tbl">${tot.length ? tot.map(t => `<div class="r"><b>${cant(t.cantidad)}</b><span class="nm"><span>${esc(t.nombre)}</span></span><span class="from">Nº ${t.de.map(num).join(' · ')}</span></div>`).join('')
             : '<p class="muted" style="padding:20px 0">Elegí pedidos para ver el total.</p>'}</div>
           <div class="actions no-print">
@@ -474,7 +474,7 @@
     const r = Math.max(28, Math.min(58, w / 5.6, h / 4.4));
     const paso = r * 1.75;
     const reparto = (largo) => {
-      const n = Math.max(2, Math.round((largo - 2 * r) / paso) + 1);
+      const n = Math.max(2, Math.ceil((largo - 2 * r) / paso) + 1);
       return Array.from({ length: n }, (_, i) => r + (i * (largo - 2 * r)) / (n - 1));
     };
     let c = '';
