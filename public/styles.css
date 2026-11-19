@@ -93,9 +93,12 @@ h1 em{color:var(--fuc);font-weight:700;font-style:italic}
 .stats div:first-child{padding-left:0}.stats div:last-child{border-right:0;padding-right:0}
 .stats b{font:400 34px/1 var(--sans);letter-spacing:-.03em}
 .stats b.f{color:var(--fuc);font-weight:700;font-style:italic}
+.stats b.plata{font-size:26px;font-weight:600;font-style:italic;white-space:nowrap}
 
 /* ---------- comandas ---------- */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px 20px;align-items:start}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 20px;align-items:start}
+@media (max-width:1320px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1020px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .t{position:relative;padding:50px 48px 48px;background-repeat:no-repeat;background-size:100% 100%;transition:filter .2s}
 .t:hover{filter:drop-shadow(0 8px 18px rgba(43,33,30,.07))}
 .t.cancelado{opacity:.45}
@@ -127,7 +130,32 @@ h1 em{color:var(--fuc);font-weight:700;font-style:italic}
 .st i{width:6px;height:6px;border-radius:50%;background:var(--mute)}
 .st.pendiente i{background:var(--fuc)} .st.listo i{background:var(--ros)} .st.entregado i{background:var(--ink)}
 .st:hover{color:var(--ink)}
-.who{font-size:11.5px;font-style:italic;color:var(--mute);margin-top:8px;padding-right:28px}
+.pie{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:12px;padding-right:30px;min-height:18px}
+.who{font-size:11.5px;font-style:italic;color:var(--mute)}
+.acc{display:flex;gap:12px;font-size:11.5px}
+.acc a,.acc button{color:var(--mute);text-decoration:none;padding:2px 0}
+.acc a:hover{color:var(--ink)} .acc button:hover{color:var(--fuc)}
+
+/* pago dentro de la comanda */
+.pago{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.pago.vacio{display:flex;justify-content:space-between;align-items:baseline}
+.pago-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.pago-l{list-style:none}
+.t .pago-l li{border-bottom:0;padding:3px 0;font-size:12px;color:var(--mute)}
+.t .pago-l li .q{font-size:12.5px;font-weight:500;font-style:normal;color:var(--ink);white-space:nowrap}
+.t .pago-l li.falta{color:var(--ink);font-weight:600}
+.t .pago-l li.falta .q{font-size:15px;font-weight:700;font-style:italic;color:var(--fuc)}
+.t .pago-l li.falta.cero .q{color:var(--mute)}
+.ptag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:600;font-style:italic;white-space:nowrap}
+.ptag.pagado{background:var(--ink);color:var(--bg)}
+.ptag.sena{background:var(--ros);color:var(--ink)}
+.ptag.nopago{border:1px solid var(--fuc);color:var(--fuc)}
+.pago-acc{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+.mini-f{display:flex;align-items:baseline;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:5px 0}
+.mini-f span{font-size:12px;color:var(--mute)}
+.mini-f input{border:0;background:transparent;outline:0;text-align:right;font:600 14px var(--sans);color:var(--ink);width:55%;min-width:0}
+.mini-f:focus-within{border-color:var(--fuc)}
+.btn.sm{padding:7px 14px;font-size:12px}
 .sello{position:absolute;right:46px;bottom:44px;width:18px;height:18px;background:var(--flor) center/contain no-repeat}
 
 .dia-grupo{margin-bottom:40px}
@@ -148,11 +176,14 @@ h1 em{color:var(--fuc);font-weight:700;font-style:italic}
 /* ---------- formulario ---------- */
 .form{display:grid;grid-template-columns:1.25fr .85fr;gap:56px;margin-top:34px;align-items:start}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+.saldo{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-6px 0 22px;font-size:13px;min-height:24px}
+.saldo b{color:var(--fuc);font-weight:700;font-style:italic;font-size:16px}
 .field{display:block;border-bottom:1px solid var(--ink);padding:12px 0 6px;margin-bottom:20px}
 .field:focus-within{border-color:var(--fuc)}
 .field:focus-within .lbl{color:var(--fuc)}
 .field input,.field textarea,.field select{display:block;width:100%;border:0;background:transparent;font:500 19px/1.35 var(--sans);letter-spacing:-.01em;color:var(--ink);margin-top:5px;padding:2px 0;outline:0;resize:vertical}
-.field textarea{font-style:italic;font-size:17px;min-height:34px}
+.field textarea{font-style:italic;font-size:17px;min-height:34px;overflow:hidden;resize:none}
 .field ::placeholder{color:var(--faint);font-weight:400;font-style:italic}
 .field .opt{font-style:italic;font-weight:400}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--ink);border-radius:999px;overflow:hidden;margin-top:10px}
@@ -227,8 +258,15 @@ h1 em{color:var(--fuc);font-weight:700;font-style:italic}
   .form,.prov{grid-template-columns:1fr;gap:28px;margin-top:22px}
   .prov > .totales{order:-1}
   .row2{grid-template-columns:1fr;gap:0}
+  .row3{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .row3 .opt{display:none}
+  .filters{flex-wrap:nowrap;overflow-x:auto;margin:0 -20px;padding:2px 20px 4px;scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex:none}
+  .search{flex:none;width:140px;margin:0 0 0 6px;font-size:16px}
+  .mini-f input{font-size:16px}
+  .stats b.plata{font-size:20px}
   .preview{display:none}
-  .search{width:100%;margin:6px 0 0}
   .bar{left:16px;right:16px;transform:none;justify-content:space-between;gap:10px;padding-left:18px;bottom:calc(16px + env(safe-area-inset-bottom))}
   .tbl .r{grid-template-columns:48px 1fr}
   .tbl .r .from{grid-column:2;text-align:left}

@@ -21,6 +21,26 @@
   const norm = s => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
   const hora = p => (p.hora ? `&nbsp;·&nbsp; ${esc(p.hora)}` : '');
 
+  const plata = n => { const v = Number(n || 0); return '$ ' + v.toLocaleString('es-AR', Number.isInteger(v) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  const leerPlata = v => {
+    const t = String(v ?? '').trim();
+    if (!t) return null;
+    const n = Number(t.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const montoInput = n => (n === null || n === undefined ? '' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 }));
+  function pagoDe(p) {
+    const total = p.total === null || p.total === undefined || p.total === '' ? null : Number(p.total);
+    const sena = Number(p.sena) || 0, pagado = Number(p.pagado) || 0;
+    const abonado = sena + pagado;
+    const falta = total === null ? null : Math.max(0, total - abonado);
+    let estado = 'nopago';
+    if (total !== null && total > 0 && falta === 0) estado = 'pagado';
+    else if (abonado > 0) estado = 'sena';
+    return { total, sena, pagado, abonado, falta, estado, cargado: total !== null || abonado > 0 };
+  }
+  const PAGO_LBL = { pagado: 'Pagado', sena: 'Con seña', nopago: 'Sin pagar' };
+
   function toast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
@@ -40,6 +60,8 @@
   const S = {
     dia: hoy(),
     vista: 'dia',
+    pago: '',
+    editPago: null,
     filtro: 'todos',
     entrega: '',
     q: '',
@@ -82,6 +104,7 @@
     return S.pedidos.filter(p =>
       (S.filtro === 'todos' ? p.estado !== 'cancelado' : p.estado === S.filtro) &&
       (!S.entrega || p.entrega === S.entrega) &&
+      (!S.pago || (pagoDe(p).estado !== 'pagado')) &&
       (!q || norm(`${p.nombre} ${p.telefono} ${p.recibe} ${p.items.map(i => i.producto).join(' ')}`).includes(q)));
   }
 
@@ -98,10 +121,38 @@
       <div class="ft"><span class="tag ${p.entrega === 'envio' ? 'env' : 'ret'}">${p.entrega === 'envio' ? 'Envío' : 'Retira'}</span>
         ${preview ? '' : `<button class="st ${p.estado}" data-act="estado" title="Cambiar estado"><i></i>${ESTADO_LBL[p.estado]}</button>`}</div>
       ${p.entrega === 'envio' && (p.direccion || p.recibe) ? `<div class="addr">${esc(p.direccion)}${p.recibe ? ` · recibe ${esc(p.recibe)}` : ''}</div>` : ''}
+      ${bloquePago(p, preview)}
       ${p.proveedor_at ? '<div style="margin-top:10px"><span class="tag prov">Pedido al proveedor ✓</span></div>' : ''}
-      ${p.tomado_por ? `<div class="who">tomó: ${esc(p.tomado_por)}</div>` : '<div class="who"></div>'}
+      <div class="pie">${p.tomado_por ? `<span class="who">tomó: ${esc(p.tomado_por)}</span>` : '<span class="who"></span>'}
+        ${preview ? '' : `<span class="acc"><a href="#/editar/${p.id}">editar</a><button data-act="borrar">eliminar</button></span>`}</div>
       <span class="sello" aria-hidden="true"></span>
     </article>`;
+  }
+
+  function bloquePago(p, preview) {
+    const g = pagoDe(p);
+    if (!preview && S.editPago === p.id) {
+      return `<div class="pago editando">
+        <div class="pago-h"><span class="lbl">Pago</span></div>
+        <label class="mini-f"><span>Total</span><input data-pago="total" inputmode="decimal" value="${esc(montoInput(g.total))}" placeholder="$ 0"></label>
+        <label class="mini-f"><span>Seña</span><input data-pago="sena" inputmode="decimal" value="${esc(g.sena ? montoInput(g.sena) : '')}" placeholder="$ 0"></label>
+        <label class="mini-f"><span>Pagado</span><input data-pago="pagado" inputmode="decimal" value="${esc(g.pagado ? montoInput(g.pagado) : '')}" placeholder="$ 0"></label>
+        <div class="pago-acc"><button class="btn sm" data-act="pago-ok">Guardar</button><button class="linkbtn" data-act="pago-no">cancelar</button></div>
+      </div>`;
+    }
+    if (!g.cargado) {
+      return preview ? '' : `<div class="pago vacio"><span class="lbl">Pago</span><button class="linkbtn f" data-act="pago-edit">+ cargar precio</button></div>`;
+    }
+    return `<div class="pago">
+      <div class="pago-h"><span class="lbl">Pago</span><span class="ptag ${g.estado}">${PAGO_LBL[g.estado]}</span></div>
+      <ul class="pago-l">
+        ${g.total !== null ? `<li><span class="p">Total</span><span class="q">${plata(g.total)}</span></li>` : ''}
+        ${g.sena ? `<li><span class="p">Seña</span><span class="q">${plata(g.sena)}</span></li>` : ''}
+        ${g.pagado ? `<li><span class="p">Pagado</span><span class="q">${plata(g.pagado)}</span></li>` : ''}
+        ${g.falta !== null ? `<li class="falta ${g.falta ? '' : 'cero'}"><span class="p">Falta</span><span class="q">${plata(g.falta)}</span></li>` : ''}
+      </ul>
+      ${preview ? '' : `<div class="pago-acc"><button class="linkbtn" data-act="pago-edit">editar montos</button>${g.falta ? '<button class="linkbtn f" data-act="pago-saldo">cobrar saldo</button>' : ''}</div>`}
+    </div>`;
   }
 
   function masthead(...partes) {
@@ -136,11 +187,12 @@
     const searchFocused = document.activeElement && document.activeElement.id === 'q';
     const d = parse(S.dia);
     const titulo = todos ? 'Todos <em>los pedidos</em>' : `Pedidos <em>${esHoy ? 'del día' : 'del ' + DIAS[d.getDay()] + ' ' + d.getDate()}</em>`;
+    const aCobrar = activos.reduce((t, p) => { const g = pagoDe(p); return t + (g.falta || 0); }, 0);
     const stats = todos
       ? [['Pedidos', activos.length], ['Pendientes', activos.filter(p => p.estado === 'pendiente').length, 'f'],
-         ['Próximos', activos.filter(p => p.fecha >= hoy()).length], ['Entregados', activos.filter(p => p.estado === 'entregado').length]]
+         ['Próximos', activos.filter(p => p.fecha >= hoy()).length], ['A cobrar', plata(aCobrar), 'plata']]
       : [['Pedidos', activos.length], ['Pendientes', activos.filter(p => p.estado === 'pendiente').length, 'f'],
-         ['Para enviar', activos.filter(p => p.entrega === 'envio').length], ['Para retirar', activos.filter(p => p.entrega === 'retiro').length]];
+         ['Envío · retiro', `${activos.filter(p => p.entrega === 'envio').length} · ${activos.filter(p => p.entrega === 'retiro').length}`], ['A cobrar', plata(aCobrar), 'plata']];
     $app.innerHTML = `
       ${masthead('Casa Cler', '<span class="mk">Florería</span>', 'Agenda de pedidos', todos ? 'Archivo completo' : largo(S.dia))}
       <div class="head">
@@ -157,7 +209,7 @@
         <div>
           <div class="filters">
             ${chip('todos', 'Todos')}${chip('pendiente', 'Pendientes')}${chip('listo', 'Listos')}${chip('entregado', 'Entregados')}
-            <span class="sep"></span>${chipE('envio', 'Envío')}${chipE('retiro', 'Retiro')}
+            <span class="sep"></span>${chipE('envio', 'Envío')}${chipE('retiro', 'Retiro')}<button class="chip ${S.pago ? 'on' : ''}" data-pg="1">Deben</button>
             <input class="search" id="q" type="search" placeholder="buscar…" value="${esc(S.q)}" aria-label="Buscar pedido">
           </div>
           <p class="lede" style="margin-left:auto">Cada pedido es una <b>comanda</b>: quién lo pide, qué lleva, cómo se entrega y quién lo tomó. Tocá el estado para avanzarlo y tildá varias para armar el <span class="mk">pedido al proveedor</span>.</p>
@@ -173,10 +225,11 @@
   }
 
   $app.addEventListener('click', async e => {
-    const el = e.target.closest('[data-f],[data-e],[data-d],[data-v],[data-act]');
+    const el = e.target.closest('[data-f],[data-e],[data-d],[data-v],[data-pg],[data-act]');
     if (!el || !$app.contains(el)) return;
     if (el.dataset.f) { S.filtro = el.dataset.f; return pintarPedidos(); }
     if ('e' in el.dataset) { S.entrega = S.entrega === el.dataset.e ? '' : el.dataset.e; return pintarPedidos(); }
+    if ('pg' in el.dataset) { S.pago = S.pago ? '' : 'debe'; return pintarPedidos(); }
     if ('v' in el.dataset) { S.vista = el.dataset.v; return renderPedidos(); }
     if ('d' in el.dataset) { S.dia = el.dataset.d === '0' ? hoy() : addDays(S.dia, Number(el.dataset.d)); return renderPedidos(); }
     const act = el.dataset.act;
@@ -189,6 +242,33 @@
       S.prov = { ...S.prov, desde: fechas[0] || S.dia, hasta: fechas[fechas.length - 1] || S.dia, preset: 'sel', ids: new Set(S.sel) };
       location.hash = '#/proveedor'; return;
     }
+    if (act === 'borrar') {
+      const p = S.pedidos.find(x => x.id === id);
+      if (!confirm(`¿Eliminar el pedido Nº ${num(id)} de ${p.nombre}? No se puede deshacer.`)) return;
+      try {
+        await api(`/api/pedidos/${id}`, { method: 'DELETE' });
+        S.pedidos = S.pedidos.filter(x => x.id !== id); S.sel.delete(id);
+        pintarPedidos(); toast(`Pedido Nº ${num(id)} eliminado`);
+      } catch (err) { toast(err.message); }
+      return;
+    }
+    if (act === 'pago-edit') { S.editPago = id; pintarPedidos(); const i = card && document.querySelector(`.t[data-id="${id}"] [data-pago=total]`); if (i) i.focus(); return; }
+    if (act === 'pago-no') { S.editPago = null; return pintarPedidos(); }
+    if (act === 'pago-ok' || act === 'pago-saldo') {
+      const p = S.pedidos.find(x => x.id === id);
+      let body;
+      if (act === 'pago-saldo') { const g = pagoDe(p); body = { pagado: g.pagado + g.falta }; }
+      else {
+        const v = k => card.querySelector(`[data-pago=${k}]`).value;
+        body = { total: leerPlata(v('total')), sena: leerPlata(v('sena')) || 0, pagado: leerPlata(v('pagado')) || 0 };
+      }
+      try {
+        const nuevo = await api(`/api/pedidos/${id}/pago`, { method: 'PATCH', body });
+        Object.assign(p, nuevo); S.editPago = null; pintarPedidos();
+        const g = pagoDe(p); toast(g.estado === 'pagado' ? `Nº ${num(id)} · pagado` : `Nº ${num(id)} · falta ${plata(g.falta || 0)}`);
+      } catch (err) { toast(err.message); }
+      return;
+    }
     if (act === 'estado') {
       const p = S.pedidos.find(x => x.id === id);
       const nuevo = SIGUIENTE[p.estado];
@@ -196,6 +276,10 @@
       try { await api(`/api/pedidos/${id}/estado`, { method: 'PATCH', body: { estado: nuevo } }); toast(`Nº ${num(id)} · ${ESTADO_LBL[nuevo]}`); }
       catch (err) { toast(err.message); renderPedidos(true); }
     }
+  });
+  $app.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.dataset && e.target.dataset.pago) { e.preventDefault(); e.target.closest('.t').querySelector('[data-act=pago-ok]').click(); }
+    if (e.key === 'Escape' && S.editPago) { S.editPago = null; pintarPedidos(); }
   });
   $app.addEventListener('input', e => {
     if (e.target.id === 'q') { S.q = e.target.value; pintarPedidos(); }
@@ -257,6 +341,13 @@
             <label class="field"><span class="lbl">Para el día</span><input name="fecha" type="date" value="${esc(f.fecha)}" required></label>
             <label class="field"><span class="lbl">Horario <span class="opt">(opcional)</span></span><input name="hora" value="${esc(f.hora)}" placeholder="11 hs · por la tarde"></label>
           </div>
+          <div class="lbl" style="margin-top:12px">Pago</div>
+          <div class="row3">
+            <label class="field"><span class="lbl">Precio total</span><input name="total" inputmode="decimal" value="${esc(montoInput(f.total))}" placeholder="$ 0"></label>
+            <label class="field"><span class="lbl">Seña</span><input name="sena" inputmode="decimal" value="${esc(f.sena ? montoInput(f.sena) : '')}" placeholder="$ 0"></label>
+            <label class="field"><span class="lbl">Pagado <span class="opt">(además de la seña)</span></span><input name="pagado" inputmode="decimal" value="${esc(f.pagado ? montoInput(f.pagado) : '')}" placeholder="$ 0"></label>
+          </div>
+          <div class="saldo" id="saldo"></div>
           <label class="field"><span class="lbl">Dedicatoria / tarjeta <span class="opt">(opcional)</span></span><textarea name="dedicatoria" rows="1" placeholder="Lo que va escrito en la tarjeta">${esc(f.dedicatoria)}</textarea></label>
           <div class="row2">
             <label class="field"><span class="lbl">Notas <span class="opt">(opcional)</span></span><input name="notas" value="${esc(f.notas)}" placeholder="Colores, timbre, seña…"></label>
@@ -288,6 +379,7 @@
       return {
         ...fd, entrega, id: id || null, created_at: f.created_at || new Date().toISOString(), proveedor_at: null,
         estado: fd.estado || f.estado,
+        total: leerPlata(fd.total), sena: leerPlata(fd.sena) || 0, pagado: leerPlata(fd.pagado) || 0,
         items: [...$items.querySelectorAll('.it')].map(r => ({ cantidad: r.querySelector('.q').value, producto: r.querySelector('.p').value.trim() }))
           .filter(i => i.producto),
       };
@@ -295,11 +387,21 @@
     const preview = () => {
       const d = leer();
       document.getElementById('prev').innerHTML = ticket({ ...d, estado: 'pendiente', items: d.items.length ? d.items : [{ cantidad: '', producto: '…' }] }, { preview: true })
-        + (d.fecha ? `<p class="lbl cuando">Para el ${esc(largo(d.fecha).toLowerCase())}${d.hora ? ' · ' + esc(d.hora) : ''}</p>` : '');
+        + '' + (d.fecha ? `<p class="lbl cuando">Para el ${esc(largo(d.fecha).toLowerCase())}${d.hora ? ' · ' + esc(d.hora) : ''}</p>` : '');
       nubes();
+      const g = pagoDe(d);
+      document.getElementById('saldo').innerHTML = g.cargado
+        ? `<span class="ptag ${g.estado}">${PAGO_LBL[g.estado]}</span>${g.falta !== null ? `<span>Falta pagar <b>${plata(g.falta)}</b></span>` : '<span class="muted">Cargá el precio total para calcular el saldo</span>'}
+           ${g.falta ? '<button type="button" class="linkbtn f" id="pago-todo">pagó todo</button>' : ''}`
+        : '<span class="muted">Sin datos de pago todavía.</span>';
+      const pt = document.getElementById('pago-todo');
+      if (pt) pt.onclick = () => { form.pagado.value = montoInput(g.pagado + g.falta); preview(); };
     };
     preview();
 
+    const ta = form.querySelector('textarea');
+    const crecer = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    crecer(); ta.addEventListener('input', crecer);
     form.addEventListener('input', preview);
     document.getElementById('add').onclick = () => {
       $items.insertAdjacentHTML('beforeend', itemRow());
@@ -522,7 +624,7 @@
     return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.id !== 'q';
   }
   async function refrescar() {
-    if (document.hidden || editando()) return;
+    if (document.hidden || editando() || S.editPago) return;
     const h = location.hash.replace(/^#/, '') || '/';
     if (h === '/' || h === '') renderPedidos(true);
     else if (h.startsWith('/proveedor')) renderProveedor(true);

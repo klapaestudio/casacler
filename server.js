@@ -54,6 +54,11 @@ app.use('/api', (req, res, next) => (isAuthed(req) ? next() : res.status(401).js
 /* ---------- Helpers ---------- */
 const ESTADOS = ['pendiente', 'listo', 'entregado', 'cancelado'];
 const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
+const plata = v => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+};
 const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
 function limpiarPedido(b) {
@@ -70,6 +75,9 @@ function limpiarPedido(b) {
     notas: str(b.notas, 1000),
     tomado_por: str(b.tomado_por, 60),
     estado: ESTADOS.includes(b.estado) ? b.estado : 'pendiente',
+    total: plata(b.total),
+    sena: plata(b.sena) || 0,
+    pagado: plata(b.pagado) || 0,
     items: items
       .map(i => ({ producto: str(i.producto, 160), cantidad: Math.max(0, Number(i.cantidad) || 0) }))
       .filter(i => i.producto && i.cantidad > 0),
@@ -83,6 +91,7 @@ function limpiarPedido(b) {
 
 const SELECT = `
   SELECT p.*, to_char(p.fecha,'YYYY-MM-DD') AS fecha,
+    p.total::float AS total, p.sena::float AS sena, p.pagado::float AS pagado,
     COALESCE(json_agg(json_build_object('producto', i.producto, 'cantidad', i.cantidad::float) ORDER BY i.orden)
       FILTER (WHERE i.id IS NOT NULL), '[]') AS items
   FROM pedidos p LEFT JOIN items i ON i.pedido_id = p.id`;
@@ -126,9 +135,9 @@ app.post('/api/pedidos', wrap(async (req, res) => {
   try {
     await c.query('BEGIN');
     const r = await c.query(
-      `INSERT INTO pedidos (nombre,telefono,entrega,direccion,recibe,fecha,hora,dedicatoria,notas,tomado_por,estado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-      [p.nombre, p.telefono, p.entrega, p.direccion, p.recibe, p.fecha, p.hora, p.dedicatoria, p.notas, p.tomado_por, p.estado]);
+      `INSERT INTO pedidos (nombre,telefono,entrega,direccion,recibe,fecha,hora,dedicatoria,notas,tomado_por,estado,total,sena,pagado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+      [p.nombre, p.telefono, p.entrega, p.direccion, p.recibe, p.fecha, p.hora, p.dedicatoria, p.notas, p.tomado_por, p.estado, p.total, p.sena, p.pagado]);
     await guardarItems(c, r.rows[0].id, p.items);
     await c.query('COMMIT');
     res.status(201).json(await uno(r.rows[0].id));
@@ -144,8 +153,8 @@ app.put('/api/pedidos/:id', wrap(async (req, res) => {
     await c.query('BEGIN');
     const r = await c.query(
       `UPDATE pedidos SET nombre=$1,telefono=$2,entrega=$3,direccion=$4,recibe=$5,fecha=$6,hora=$7,
-         dedicatoria=$8,notas=$9,tomado_por=$10,estado=$11,updated_at=now() WHERE id=$12`,
-      [p.nombre, p.telefono, p.entrega, p.direccion, p.recibe, p.fecha, p.hora, p.dedicatoria, p.notas, p.tomado_por, p.estado, id]);
+         dedicatoria=$8,notas=$9,tomado_por=$10,estado=$11,total=$12,sena=$13,pagado=$14,updated_at=now() WHERE id=$15`,
+      [p.nombre, p.telefono, p.entrega, p.direccion, p.recibe, p.fecha, p.hora, p.dedicatoria, p.notas, p.tomado_por, p.estado, p.total, p.sena, p.pagado, id]);
     if (!r.rowCount) { await c.query('ROLLBACK'); return res.status(404).json({ error: 'No existe' }); }
     await guardarItems(c, id, p.items);
     await c.query('COMMIT');
@@ -157,6 +166,19 @@ app.patch('/api/pedidos/:id/estado', wrap(async (req, res) => {
   const estado = (req.body || {}).estado;
   if (!ESTADOS.includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
   const r = await pool.query('UPDATE pedidos SET estado=$1, updated_at=now() WHERE id=$2', [estado, Number(req.params.id)]);
+  r.rowCount ? res.json(await uno(Number(req.params.id))) : res.status(404).json({ error: 'No existe' });
+}));
+
+// Cambia solo los montos (total, seña, pagado) desde la comanda
+app.patch('/api/pedidos/:id/pago', wrap(async (req, res) => {
+  const b = req.body || {};
+  const sets = [], args = [];
+  if ('total' in b) { args.push(plata(b.total)); sets.push(`total=$${args.length}`); }
+  if ('sena' in b) { args.push(plata(b.sena) || 0); sets.push(`sena=$${args.length}`); }
+  if ('pagado' in b) { args.push(plata(b.pagado) || 0); sets.push(`pagado=$${args.length}`); }
+  if (!sets.length) return res.status(400).json({ error: 'Nada para cambiar' });
+  args.push(Number(req.params.id));
+  const r = await pool.query(`UPDATE pedidos SET ${sets.join(',')}, updated_at=now() WHERE id=$${args.length}`, args);
   r.rowCount ? res.json(await uno(Number(req.params.id))) : res.status(404).json({ error: 'No existe' });
 }));
 

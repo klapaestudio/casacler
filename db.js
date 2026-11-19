@@ -43,6 +43,9 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS pedidos_fecha_idx ON pedidos (fecha);
     CREATE INDEX IF NOT EXISTS items_pedido_idx ON items (pedido_id);
+    ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS total  NUMERIC(12,2);
+    ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sena   NUMERIC(12,2) NOT NULL DEFAULT 0;
+    ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pagado NUMERIC(12,2) NOT NULL DEFAULT 0;
   `);
 }
 
