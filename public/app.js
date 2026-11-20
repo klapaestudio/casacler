@@ -60,6 +60,8 @@
   const S = {
     dia: hoy(),
     vista: 'dia',
+    semana: null,
+    modal: null,
     pago: '',
     editPago: null,
     filtro: 'todos',
@@ -78,10 +80,13 @@
     const h = location.hash.replace(/^#/, '') || '/';
     const [, a, b] = h.split('/');
     document.querySelectorAll('#tabs a').forEach(x => x.classList.toggle('on',
-      x.dataset.tab === (a === 'nuevo' || a === 'editar' ? 'nuevo' : a === 'proveedor' ? 'proveedor' : 'pedidos')));
+      x.dataset.tab === (a === 'nuevo' || a === 'editar' ? 'nuevo' : a === 'proveedor' ? 'proveedor' : a === 'semana' ? 'semana' : 'pedidos')));
+    S.modal = null;
+    document.body.classList.remove('con-modal');
     if (a === 'nuevo') return renderForm(null);
     if (a === 'editar' && b) return renderForm(Number(b));
     if (a === 'proveedor') return renderProveedor();
+    if (a === 'semana') return renderSemana();
     return renderPedidos();
   }
   window.addEventListener('hashchange', route);
@@ -108,12 +113,12 @@
       (!q || norm(`${p.nombre} ${p.telefono} ${p.recibe} ${p.items.map(i => i.producto).join(' ')}`).includes(q)));
   }
 
-  function ticket(p, { preview = false } = {}) {
+  function ticket(p, { preview = false, sinSel = false } = {}) {
     const sel = S.sel.has(p.id);
     const tel = p.telefono ? (preview ? `<span class="tel">${esc(p.telefono)}</span>` : `<a class="tel" href="tel:${esc(p.telefono.replace(/[^\d+]/g, ''))}">${esc(p.telefono)}</a>`) : '';
     return `<article class="t ${p.estado} ${sel ? 'sel' : ''}" data-id="${p.id || ''}">
       <div class="h"><span class="no"><b>Nº ${p.id ? num(p.id) : '—'}</b>${hora(p)}</span>
-        ${preview ? '' : `<button class="box ${sel ? 'on' : ''}" data-act="sel" aria-pressed="${sel}" aria-label="Seleccionar para agrupar"></button>`}</div>
+        ${preview || sinSel ? '' : `<button class="box ${sel ? 'on' : ''}" data-act="sel" aria-pressed="${sel}" aria-label="Seleccionar para agrupar"></button>`}</div>
       ${preview ? `<span class="t-name">${esc(p.nombre) || '<span class="muted">Nombre</span>'}</span>` : `<a class="t-name" href="#/editar/${p.id}">${esc(p.nombre)}</a>`}
       ${tel}
       <ul>${p.items.map(i => `<li><span class="p">${esc(i.producto)}</span><span class="q">${cant(i.cantidad)}</span></li>`).join('')}</ul>
@@ -235,8 +240,8 @@
     const act = el.dataset.act;
     const card = el.closest('.t');
     const id = card && Number(card.dataset.id);
-    if (act === 'sel') { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); return pintarPedidos(); }
-    if (act === 'limpiar-sel') { S.sel.clear(); return pintarPedidos(); }
+    if (act === 'sel') { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); return repintar(); }
+    if (act === 'limpiar-sel') { S.sel.clear(); return repintar(); }
     if (act === 'agrupar') {
       const fechas = S.pedidos.filter(p => S.sel.has(p.id)).map(p => p.fecha).sort();
       S.prov = { ...S.prov, desde: fechas[0] || S.dia, hasta: fechas[fechas.length - 1] || S.dia, preset: 'sel', ids: new Set(S.sel) };
@@ -248,12 +253,12 @@
       try {
         await api(`/api/pedidos/${id}`, { method: 'DELETE' });
         S.pedidos = S.pedidos.filter(x => x.id !== id); S.sel.delete(id);
-        pintarPedidos(); toast(`Pedido Nº ${num(id)} eliminado`);
+        repintar(); toast(`Pedido Nº ${num(id)} eliminado`);
       } catch (err) { toast(err.message); }
       return;
     }
-    if (act === 'pago-edit') { S.editPago = id; pintarPedidos(); const i = card && document.querySelector(`.t[data-id="${id}"] [data-pago=total]`); if (i) i.focus(); return; }
-    if (act === 'pago-no') { S.editPago = null; return pintarPedidos(); }
+    if (act === 'pago-edit') { S.editPago = id; repintar(); const i = card && document.querySelector(`.t[data-id="${id}"] [data-pago=total]`); if (i) i.focus(); return; }
+    if (act === 'pago-no') { S.editPago = null; return repintar(); }
     if (act === 'pago-ok' || act === 'pago-saldo') {
       const p = S.pedidos.find(x => x.id === id);
       let body;
@@ -264,7 +269,7 @@
       }
       try {
         const nuevo = await api(`/api/pedidos/${id}/pago`, { method: 'PATCH', body });
-        Object.assign(p, nuevo); S.editPago = null; pintarPedidos();
+        Object.assign(p, nuevo); S.editPago = null; repintar();
         const g = pagoDe(p); toast(g.estado === 'pagado' ? `Nº ${num(id)} · pagado` : `Nº ${num(id)} · falta ${plata(g.falta || 0)}`);
       } catch (err) { toast(err.message); }
       return;
@@ -272,14 +277,14 @@
     if (act === 'estado') {
       const p = S.pedidos.find(x => x.id === id);
       const nuevo = SIGUIENTE[p.estado];
-      p.estado = nuevo; pintarPedidos();
+      p.estado = nuevo; repintar();
       try { await api(`/api/pedidos/${id}/estado`, { method: 'PATCH', body: { estado: nuevo } }); toast(`Nº ${num(id)} · ${ESTADO_LBL[nuevo]}`); }
-      catch (err) { toast(err.message); renderPedidos(true); }
+      catch (err) { toast(err.message); refrescar(true); }
     }
   });
   $app.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.dataset && e.target.dataset.pago) { e.preventDefault(); e.target.closest('.t').querySelector('[data-act=pago-ok]').click(); }
-    if (e.key === 'Escape' && S.editPago) { S.editPago = null; pintarPedidos(); }
+    if (e.key === 'Escape' && S.editPago) { S.editPago = null; repintar(); }
   });
   $app.addEventListener('input', e => {
     if (e.target.id === 'q') { S.q = e.target.value; pintarPedidos(); }
@@ -290,6 +295,78 @@
   $app.addEventListener('click', e => {
     const lab = e.target.closest('.daynav .d');
     if (lab) { const i = lab.querySelector('input'); if (i && i.showPicker) { e.preventDefault(); try { i.showPicker(); } catch (_) {} } }
+  });
+
+  function repintar() {
+    (location.hash.startsWith('#/semana') ? pintarSemana : pintarPedidos)();
+  }
+
+  /* ---------- SEMANA (lunes a sábado) ---------- */
+  const lunesDe = iso => { const d = parse(iso); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return iso_(d); };
+  function iso_(d) { return iso(d); }
+
+  async function renderSemana(silencioso) {
+    if (!S.semana) S.semana = lunesDe(hoy());
+    if (!silencioso) $app.innerHTML = '<p class="muted">Cargando…</p>';
+    try {
+      S.pedidos = (await api(`/api/pedidos?desde=${S.semana}&hasta=${addDays(S.semana, 5)}`)).filter(p => p.estado !== 'cancelado');
+    } catch (e) { if (e.message !== 'auth') $app.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+    if (S.modal && !S.pedidos.some(p => p.id === S.modal)) S.modal = null;
+    pintarSemana();
+  }
+
+  function pintarSemana() {
+    const lun = S.semana, sab = addDays(lun, 5), h = hoy();
+    const esta = lun === lunesDe(h);
+    const dl = parse(lun), ds = parse(sab);
+    const rango = dl.getMonth() === ds.getMonth()
+      ? `${dl.getDate()} al ${ds.getDate()} de ${MESES[ds.getMonth()]}`
+      : `${dl.getDate()} de ${MESES[dl.getMonth()]} al ${ds.getDate()} de ${MESES[ds.getMonth()]}`;
+    const dias = Array.from({ length: 6 }, (_, i) => addDays(lun, i));
+    const total = S.pedidos.length;
+    const col = d => {
+      const ps = S.pedidos.filter(p => p.fecha === d);
+      const dd = parse(d);
+      return `<section class="sem-dia ${d === h ? 'hoy' : ''} ${d < h ? 'pasado' : ''}">
+        <header><span class="sem-n">${cap(DIAS[dd.getDay()])} <b>${dd.getDate()}</b></span><span class="sem-c">${ps.length ? ps.length + (ps.length === 1 ? ' pedido' : ' pedidos') : '—'}</span></header>
+        <div class="sem-lista">${ps.map(p => `<button class="sem-p ${p.estado}" data-abrir="${p.id}">
+            <span class="sem-top"><b>Nº ${num(p.id)}</b>${p.hora ? ` · ${esc(p.hora)}` : ''}<i class="dot ${p.estado}" title="${ESTADO_LBL[p.estado]}"></i></span>
+            ${p.items.map(i => `<span class="sem-it"><em>${cant(i.cantidad)}</em> ${esc(i.producto)}</span>`).join('')}
+            <span class="sem-pie">${p.entrega === 'envio' ? 'Envío' : 'Retira'}</span>
+          </button>`).join('') || '<p class="sem-vacio">Sin pedidos</p>'}</div>
+      </section>`;
+    };
+    const m = S.modal && S.pedidos.find(p => p.id === S.modal);
+    $app.innerHTML = `
+      ${masthead('Casa Cler', '<span class="mk">Florería</span>', 'Calendario semanal', `${total} ${total === 1 ? 'pedido' : 'pedidos'}`)}
+      <div class="head">
+        <div>
+          <h1>La <em>semana</em> <span class="heart">&lt;3</span></h1>
+          <div class="daynav">
+            <button data-sem="-7" aria-label="Semana anterior">‹</button>
+            <span class="d">${rango}</span>
+            <button data-sem="7" aria-label="Semana siguiente">›</button>
+            ${esta ? '' : '<button class="hoy" data-sem="0">Esta semana</button>'}
+          </div>
+        </div>
+        <p class="lede" style="margin-left:auto">De <b>lunes a sábado</b>, lo que hay que armar cada día. Tocá un pedido para abrir la <span class="mk">comanda completa</span>.</p>
+      </div>
+      <div class="semana">${dias.map(col).join('')}</div>
+      ${m ? `<div class="modal" data-cerrar="1"><div class="modal-in" role="dialog" aria-modal="true" aria-label="Pedido Nº ${num(m.id)}">
+          <button class="modal-x" data-cerrar="1" aria-label="Cerrar">✕</button>${ticket(m, { sinSel: true })}</div></div>` : ''}`;
+    if (m) { nubes(); document.body.classList.add('con-modal'); } else document.body.classList.remove('con-modal');
+  }
+
+  $app.addEventListener('click', e => {
+    const ab = e.target.closest('[data-abrir]');
+    if (ab) { S.modal = Number(ab.dataset.abrir); return pintarSemana(); }
+    const c = e.target.closest('[data-cerrar]');
+    if (c && (e.target === c || c.classList.contains('modal-x'))) { S.modal = null; S.editPago = null; return pintarSemana(); }
+    const sm = e.target.closest('[data-sem]');
+    if (sm) { const n = Number(sm.dataset.sem); S.semana = n ? addDays(S.semana, n) : lunesDe(hoy()); S.modal = null; return renderSemana(); }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && S.modal && !S.editPago) { S.modal = null; pintarSemana(); }
   });
 
   /* ---------- NUEVO / EDITAR ---------- */
@@ -623,10 +700,11 @@
     const a = document.activeElement;
     return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.id !== 'q';
   }
-  async function refrescar() {
-    if (document.hidden || editando() || S.editPago) return;
+  async function refrescar(forzar) {
+    if (!forzar && (document.hidden || editando() || S.editPago)) return;
     const h = location.hash.replace(/^#/, '') || '/';
     if (h === '/' || h === '') renderPedidos(true);
+    else if (h.startsWith('/semana')) renderSemana(true);
     else if (h.startsWith('/proveedor')) renderProveedor(true);
   }
   setInterval(refrescar, 15000);
